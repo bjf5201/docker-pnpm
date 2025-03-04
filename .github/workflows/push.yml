@@ -1,0 +1,94 @@
+name: Build and Push Docker Image
+
+on:
+  push:
+    branches:
+      - main
+env:
+  default_node: 23
+  default_os: bookworm
+  pnpm_patch: "10.5.2"
+  pnpm_minor: "10.5"
+  pnpm_major: "10"
+
+jobs:
+  build:
+    name: Build Docker Images
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: true
+      matrix:
+        node: [18, 20, 22, 23]
+        os: ["bookworm", "alpine"]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v 4.2.2
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@29109295f81e9208d7d86ff1c6c12d2833863392 # v 3.6.0
+        with:
+          platforms: linux/arm64, linux/amd64
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@b5ca514318bd6ebac0fb2aedd5d36ec1b5c232a2 # v 3.10.0
+        with:
+          buildkitd-flags: --debug
+
+      - name: Cache Docker Layers
+        uses: actions/cache@d4323d4df104b026a6aa633fdb11d772146be0bf # v 4.2.2
+        with:
+          path: /tmp/.buildx-cache
+          key: ${{ runner.os }}-buildx-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-buildx
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push Docker image to GitHub Container Registry
+        uses: docker/build-push-action@v4
+        with:
+          build-args: |
+            base=${{ matrix.node }}-${{ matrix.os }}
+            pnpm=${{ env.pnpm_patch }}
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            bjf5201/pnpm:${{ env.pnpm_patch }}-node${{ matrix.node }}-${{ matrix.os }}
+            bjf5201/pnpm:${{ env.pnpm_minor }}-node${{ matrix.node }}-${{ matrix.os }}
+            bjf5201/pnpm:${{ env.pnpm_major }}-node${{ matrix.node }}-${{ matrix.os }}
+            bjf5201/pnpm:${{ matrix.node }}-${{ matrix.os }}
+
+      - name: Build and push images with default Node.js version
+        if: ${{ matrix.node == env.default_node }}
+        uses: docker/build-push-action@v4
+        with:
+          build-args: |
+            base=${{ env.default_node }}-${{ matrix.os }}
+            pnpm=${{ env.pnpm_patch }}
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            bjf5201/pnpm:${{ env.pnpm_patch }}-node${{ matrix.node }}
+            bjf5201/pnpm:${{ env.pnpm_minor }}-node${{ matrix.node }}
+            bjf5201/pnpm:${{ env.pnpm_major }}-node${{ matrix.node }}
+
+      - name: Build and push images with default Node.js version and default OS
+        if: ${{ matrix.node == env.default_node && matrix.os == env.default_os }}
+        uses: docker/build-push-action@v4
+        with:
+          build-args: |
+            base=${{ env.default_node }}-${{ env.default_os }}
+            pnpm=${{ env.pnpm_patch }}
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            bjf5201/pnpm:${{ env.pnpm_patch }}
+            bjf5201/pnpm:${{ env.pnpm_minor }}
+            bjf5201/pnpm:${{ env.pnpm_major }}
+            bjf5201/pnpm
